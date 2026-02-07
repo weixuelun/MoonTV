@@ -22,14 +22,18 @@
 
 ## ✨ 功能特性
 
-- 🔍 **多源聚合搜索**：增加流式搜索快速返回结果。
+- 🔍 **多源聚合搜索**：快速返回结果。
 - 📄 **丰富详情页**：支持剧集列表、演员、年份、简介等完整信息展示。
 - ▶️ **流畅在线播放**：集成 HLS.js & ArtPlayer。
+- 📥 **视频下载**：支持 M3U8 视频下载，多线程并发加速，边下边存功能（Chrome/Edge）。
 - ❤️ **收藏 + 继续观看**：支持 Redis/Upstash 存储，多端同步进度。
 - 📱 **PWA**：离线缓存、安装到桌面/主屏，移动端原生体验。
 - 🌗 **响应式布局**：桌面侧边栏 + 移动底部导航，自适应各种屏幕尺寸。
 - 🚀 **极简部署**：一条 Docker 命令即可将完整服务跑起来，或免费部署到 Vercel、Netlify、cloudflare。
 - 👿 **智能去广告**：自动跳过视频中的切片广告（实验性）
+- 💬 **弹幕支持**：以[danmu_api](https://github.com/huangxd-/danmu_api)为后端, 需自行部署
+
+### 注意：部署后项目为空壳项目，无内置播放源，需要自行收集，需要弹幕请自行部署后端
 
 <details>
   <summary>点击查看项目截图</summary>
@@ -40,6 +44,7 @@
 
 - [MoonTV(Branch)](#moontvbranch)
   - [✨ 功能特性](#-功能特性)
+    - [注意：部署后项目为空壳项目，无内置播放源，需要自行收集，需要弹幕请自行部署后端](#注意部署后项目为空壳项目无内置播放源需要自行收集需要弹幕请自行部署后端)
   - [🗺 目录](#-目录)
   - [技术栈](#技术栈)
   - [部署](#部署)
@@ -56,20 +61,23 @@
       - [直接运行（最简单，localstorage）](#直接运行最简单localstorage)
       - [Docker Compose](#docker-compose)
         - [local storage 存储](#local-storage-存储)
+        - [Kvrocks 存储（推荐）](#kvrocks-存储推荐)
+        - [Redis 存储（有一定的丢数据风险）](#redis-存储有一定的丢数据风险)
         - [Upstash 存储](#upstash-存储)
   - [环境变量](#环境变量)
   - [配置说明](#配置说明)
   - [管理员配置](#管理员配置)
   - [AndroidTV 使用](#androidtv-使用)
   - [TVBox 对接](#tvbox-对接)
+    - [本地存储(localstorage)模式](#本地存储localstorage模式)
   - [Selene 使用](#selene-使用)
-  - [Roadmap](#roadmap)
   - [安全与隐私提醒](#安全与隐私提醒)
     - [请设置密码保护并关闭公网注册](#请设置密码保护并关闭公网注册)
     - [部署要求](#部署要求)
     - [重要声明](#重要声明)
   - [License](#license)
   - [致谢](#致谢)
+  - [⭐ Star 趋势](#-star-趋势)
 
 ## 技术栈
 
@@ -88,12 +96,12 @@
 
 存储支持矩阵
 
-|               | Docker | Vercel | Cloudflare |
-| :-----------: | :----: | :----: | :--------: |
-| localstorage  |   ✅   |   ✅   |     ✅     |
-|  原生 redis   |   ✅   |        |            |
-| Cloudflare D1 |        |        |     ✅     |
-| Upstash Redis |   ☑️   |   ✅   |     ✅     |
+|               | Docker | Vercel | Netlify | Cloudflare |
+| :-----------: | :----: | :----: | :-----: | :--------: |
+| localstorage  |   ✅   |   ✅   |   ✅    |     ✅     |
+|  原生 redis   |   ✅   |        |         |            |
+| Cloudflare D1 |        |        |         |     ✅     |
+| Upstash Redis |   ☑️   |   ✅   |   ✅    |     ✅     |
 
 ✅：经测试支持
 
@@ -196,6 +204,73 @@ services:
       - PASSWORD=password
 ```
 
+##### Kvrocks 存储（推荐）
+
+```yml
+services:
+  moontv-core:
+    image: ghcr.io/stardm0/moontv:latest
+    container_name: moontv-core
+    restart: on-failure
+    ports:
+      - '3000:3000'
+    environment:
+      - USERNAME=admin
+      - PASSWORD=admin_password
+      - NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+      - KVROCKS_URL=redis://moontv-kvrocks:6666
+    networks:
+      - moontv-network
+    depends_on:
+      - moontv-kvrocks
+  moontv-kvrocks:
+    image: apache/kvrocks
+    container_name: moontv-kvrocks
+    restart: unless-stopped
+    volumes:
+      - kvrocks-data:/var/lib/kvrocks
+    networks:
+      - moontv-network
+networks:
+  moontv-network:
+    driver: bridge
+volumes:
+  kvrocks-data:
+```
+
+##### Redis 存储（有一定的丢数据风险）
+
+```yml
+services:
+  moontv-core:
+    image: ghcr.io/stardm0/moontv:latest
+    container_name: moontv-core
+    restart: on-failure
+    ports:
+      - '3000:3000'
+    environment:
+      - USERNAME=admin
+      - PASSWORD=admin_password
+      - NEXT_PUBLIC_STORAGE_TYPE=redis
+      - REDIS_URL=redis://moontv-redis:6379
+    networks:
+      - moontv-network
+    depends_on:
+      - moontv-redis
+  moontv-redis:
+    image: redis:alpine
+    container_name: moontv-redis
+    restart: unless-stopped
+    networks:
+      - moontv-network
+    # 请开启持久化，否则升级/重启后数据丢失
+    volumes:
+      - ./data:/data
+networks:
+  moontv-network:
+    driver: bridge
+```
+
 ##### Upstash 存储
 
 ```yaml
@@ -233,6 +308,7 @@ services:
 | NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE | 豆瓣图片代理类型                             | 见下方                           | direct                                                                                                                     |
 | NEXT_PUBLIC_DOUBAN_IMAGE_PROXY      | 自定义豆瓣图片代理 URL                       | url prefix                       | (空)                                                                                                                       |
 | NEXT_PUBLIC_DISABLE_YELLOW_FILTER   | 关闭色情内容过滤                             | true/false                       | false                                                                                                                      |
+| NEXT_PUBLIC_DANMU_API_BASE_URL      | 弹幕接口地址                             | 接口地址                       | (空)                                                                                                                      |
 
 NEXT_PUBLIC_DOUBAN_PROXY_TYPE 选项解释：
 
@@ -259,6 +335,7 @@ NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE 选项解释：
 
 ```json
 {
+  "cache_time": 7200,
   "api_site": {
     "dyttzy": {
       "api": "http://caiji.dyttzyapi.com/api.php/provide/vod",
@@ -330,13 +407,7 @@ MoonTV 支持标准的苹果 CMS V10 API 格式。
 
 ## Selene 使用
 
-该项目已兼容 [Selene](https://github.com/MoonTechLab/Selene) 在移动端上使用，可以直接作为 Selene 后端
-
-## Roadmap
-
-- [x] 深色模式
-- [x] 持久化存储
-- [x] 多账户
+该项目已兼容 [Selene](https://github.com/MoonTechLab/Selene) 在移动端上使用，可以直接作为 Selene 后端(本地存储不支持)
 
 ## 安全与隐私提醒
 
@@ -377,6 +448,6 @@ MoonTV 支持标准的苹果 CMS V10 API 格式。
 
 ---
 
-<!-- ## Star 趋势
+## ⭐ Star 趋势
 
-[![Stargazers over time](https://starchart.cc/LunaTechLab/MoonTV.svg?variant=adaptive)](https://starchart.cc/LunaTechLab/MoonTV) -->
+[![Stargazers over time](https://starchart.cc/stardm0/MoonTV.svg?variant=adaptive)](https://starchart.cc/stardm0/MoonTV)
